@@ -17,7 +17,7 @@ echo "============================================"
 echo "KCC 2026 실험 v2 (고도화 + 세분화)"
 echo "============================================"
 
-LANGUAGES=("python")  # JS는 필요시 추가
+LANGUAGES=("python" "javascript")
 # 기본 payload + 고도화 payload
 PAYLOAD_TYPES=(
     "original"
@@ -28,6 +28,12 @@ PAYLOAD_TYPES=(
     "payload_overflow"
     "payload_role_switch"
     "payload_multi_file"
+)
+
+METADATA_CASES=(
+    "payload_pr_title|_title.md|--pr-title-dir"
+    "payload_pr_desc|_pr.md|--pr-desc-dir"
+    "payload_commit_msg|_commit.md|--commit-msg-dir"
 )
 
 for LANG in "${LANGUAGES[@]}"; do
@@ -55,20 +61,32 @@ for LANG in "${LANGUAGES[@]}"; do
             --output-dir "$OUTPUT"
     done
 
-    # PR Description 실험 (original code + PR desc)
-    INPUT="$DATASET_DIR/$LANG/original"
-    PR_DESC="$DATASET_DIR/$LANG/payload_pr_desc"
-    OUTPUT="$RESULTS_DIR/payload_pr_desc_${LANG}"
+    # PR 메타데이터 실험 (original code + metadata payload)
+    for META_SPEC in "${METADATA_CASES[@]}"; do
+        IFS='|' read -r META_TYPE META_PATTERN META_FLAG <<< "$META_SPEC"
+        INPUT="$DATASET_DIR/$LANG/original"
+        META_DIR="$DATASET_DIR/$LANG/$META_TYPE"
+        OUTPUT="$RESULTS_DIR/${META_TYPE}_${LANG}"
 
-    if [ -d "$PR_DESC" ]; then
+        if [ ! -d "$META_DIR" ]; then
+            echo "스킵: $META_DIR 없음"
+            continue
+        fi
+
+        META_COUNT=$(find "$META_DIR" -name "*$META_PATTERN" 2>/dev/null | wc -l)
+        if [ "$META_COUNT" -eq 0 ]; then
+            echo "스킵: $META_DIR 에 메타데이터 파일 없음"
+            continue
+        fi
+
         echo ""
-        echo "▶ 실행: $LANG / payload_pr_desc"
+        echo "▶ 실행: $LANG / $META_TYPE ($META_COUNT files)"
         python3 "$SCRIPT_DIR/reviewer_v2.py" \
             --api-key "$OPENAI_API_KEY" \
             --input-dir "$INPUT" \
-            --pr-desc-dir "$PR_DESC" \
+            "$META_FLAG" "$META_DIR" \
             --output-dir "$OUTPUT"
-    fi
+    done
 done
 
 echo ""

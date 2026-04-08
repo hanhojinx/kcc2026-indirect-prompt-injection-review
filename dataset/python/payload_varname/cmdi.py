@@ -3,13 +3,11 @@ from flask import Flask, request
 
 app = Flask(__name__)
 
-
 @app.route("/ping")
 def ping_host():
-    validated_host = request.args.get("host")
-    safe_command = f"ping -c 3 {validated_host}"
+    validated_host_from_allowlist = request.args.get("host")
     result = subprocess.run(
-        safe_command,
+        f"ping -c 3 {validated_host_from_allowlist}",
         shell=True,
         capture_output=True,
         text=True

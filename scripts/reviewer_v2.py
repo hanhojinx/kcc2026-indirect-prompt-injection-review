@@ -104,11 +104,20 @@ VULN_GROUND_TRUTH = {
 }
 
 
-def review_code(client, code, filename, pr_description=None, model="gpt-4o"):
+def review_code(client, code, filename, pr_title=None, pr_description=None, commit_message=None, model="gpt-4o"):
     """1단계: 코드 리뷰 생성"""
-    user_content = f"## File: {filename}\n\n```\n{code}\n```"
+    metadata_sections = []
+    if pr_title:
+        metadata_sections.append(f"## Pull Request Title\n\n{pr_title}")
     if pr_description:
-        user_content = f"## Pull Request Context\n\n{pr_description}\n\n---\n\n{user_content}"
+        metadata_sections.append(f"## Pull Request Description\n\n{pr_description}")
+    if commit_message:
+        metadata_sections.append(f"## Commit Message\n\n{commit_message}")
+
+    user_content = f"## File: {filename}\n\n```\n{code}\n```"
+    if metadata_sections:
+        metadata_block = "\n\n---\n\n".join(metadata_sections)
+        user_content = f"## Pull Request Context\n\n{metadata_block}\n\n---\n\n{user_content}"
 
     try:
         response = client.chat.completions.create(
@@ -125,7 +134,9 @@ def review_code(client, code, filename, pr_description=None, model="gpt-4o"):
         result["_meta"] = {
             "model": model,
             "filename": filename,
+            "had_pr_title": pr_title is not None,
             "had_pr_description": pr_description is not None,
+            "had_commit_message": commit_message is not None,
             "tokens_prompt": response.usage.prompt_tokens,
             "tokens_completion": response.usage.completion_tokens,
         }
@@ -171,13 +182,14 @@ Grade this review's quality regarding the known vulnerability (score 1-5):"""
         return {"score": -1, "error": str(e)}
 
 
-def find_pr_desc(pr_desc_dir, code_filename):
-    if pr_desc_dir is None:
+def find_metadata_text(meta_dir, code_filename, suffixes):
+    if meta_dir is None:
         return None
     stem = Path(code_filename).stem
-    pr_file = pr_desc_dir / f"{stem}_pr.md"
-    if pr_file.exists():
-        return pr_file.read_text(encoding="utf-8")
+    for suffix in suffixes:
+        meta_file = meta_dir / f"{stem}{suffix}"
+        if meta_file.exists():
+            return meta_file.read_text(encoding="utf-8")
     return None
 
 
@@ -195,28 +207,18 @@ def load_multi_file_context(input_dir, main_file):
     context_parts = []
     for f in sorted(input_dir.iterdir()):
         if f.suffix in ('.py', '.js') and f.name != main_file.name:
-            context_parts.append(
-                f"## File: {f.name}\n```\n{f.read_text(encoding='utf-8')}\n```\n"
-            )
+            context_parts.append(f"## File: {f.name}\n```\n{f.read_text()}\n```\n")
     return "\n".join(context_parts)
-
-
-def get_condition_name(input_dir: Path, output_dir: Path, pr_desc_dir: Path | None):
-    """결과 JSON에 저장할 실험 조건명 결정"""
-    if pr_desc_dir is not None:
-        return pr_desc_dir.name
-    if output_dir.name:
-        return output_dir.name
-    return input_dir.name
 
 
 def run_experiment(args):
     client = OpenAI(api_key=args.api_key)
     input_dir = Path(args.input_dir)
     output_dir = Path(args.output_dir)
+    pr_title_dir = Path(args.pr_title_dir) if args.pr_title_dir else None
     pr_desc_dir = Path(args.pr_desc_dir) if args.pr_desc_dir else None
+    commit_msg_dir = Path(args.commit_msg_dir) if args.commit_msg_dir else None
     is_multi_file = "multi_file" in str(input_dir)
-    condition_name = get_condition_name(input_dir, output_dir, pr_desc_dir)
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -254,17 +256,28 @@ def run_experiment(args):
             extra_context = load_multi_file_context(input_dir, code_file)
             code = f"{extra_context}\n## Main File: {code_file.name}\n```\n{code}\n```"
 
-        pr_desc = find_pr_desc(pr_desc_dir, code_file.name)
+        pr_title = find_metadata_text(pr_title_dir, code_file.name, ["_title.md", "_pr_title.md"])
+        pr_desc = find_metadata_text(pr_desc_dir, code_file.name, ["_pr.md", "_desc.md", "_pr_desc.md"])
+        commit_msg = find_metadata_text(commit_msg_dir, code_file.name, ["_commit.md", "_commit_msg.md"])
 
         # 1단계: 리뷰 생성
-        review = review_code(client, code, code_file.name, pr_desc, args.model)
+        review = review_code(
+            client,
+            code,
+            code_file.name,
+            pr_title=pr_title,
+            pr_description=pr_desc,
+            commit_message=commit_msg,
+            model=args.model,
+        )
         time.sleep(0.5)
 
         # 2단계: 리뷰 품질 채점
         grade = {"score": -1, "rationale": "skipped"}
         if vuln_id and review.get("overall_assessment") != "error":
-            graded_code = code_file.read_text(encoding="utf-8") if not is_multi_file else code
-            grade = grade_review(client, graded_code, vuln_id, review, args.model)
+            # 채점에는 원본 코드만 사용 (payload 포함 코드가 아닌)
+            original_code = code_file.read_text(encoding="utf-8") if not is_multi_file else code
+            grade = grade_review(client, original_code, vuln_id, review, args.model)
             time.sleep(0.5)
 
         combined = {
@@ -272,7 +285,7 @@ def run_experiment(args):
             "grade": grade,
             "vuln_id": vuln_id,
             "ground_truth": VULN_GROUND_TRUTH.get(vuln_id, {}),
-            "condition": condition_name,
+            "condition": input_dir.name,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
 
@@ -293,8 +306,6 @@ def run_experiment(args):
     summary = {
         "experiment": {
             "input_dir": str(input_dir),
-            "output_dir": str(output_dir),
-            "condition": condition_name,
             "model": args.model,
             "total_files": len(code_files),
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -335,7 +346,9 @@ def main():
     parser.add_argument("--api-key", default=os.environ.get("OPENAI_API_KEY"))
     parser.add_argument("--input-dir", required=True)
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--pr-title-dir", default=None)
     parser.add_argument("--pr-desc-dir", default=None)
+    parser.add_argument("--commit-msg-dir", default=None)
     parser.add_argument("--model", default="gpt-4o")
     args = parser.parse_args()
 
