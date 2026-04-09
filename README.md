@@ -1,73 +1,46 @@
-# KCC 2026 Code Review Experiment Repo
+# Indirect Prompt Injection in LLM-Based Code Review
 
-This repository is for the KCC 2026 paper experiments.
+This repository contains the experiment code and result artifacts for the paper:
 
-The main topic is how indirect prompt injection affects review quality in LLM-based code review environments.
+*Indirect Prompt Injection in LLM-Based Code Review: A Channel-Separated Empirical Analysis of PR Metadata Attacks*
 
-The main workflow here is the dataset-based `v2` experiment. There is also a separate `advanced_experiment.py` script for more aggressive channel-combination testing.
+The project studies how pull request metadata and code-adjacent text can degrade review quality in LLM-based review settings. The repository keeps two experiment tracks:
 
-## Layout
+- A dataset-driven benchmark under `dataset/` and `scripts/reviewer_v2.py`
+- A synthetic channel-combination benchmark under `scripts/advanced_experiment.py`
+
+## Repository Layout
 
 ```text
 github-code-review/
+├── cases/
 ├── dataset/
-├── scripts/
-├── results_v2/
 ├── results_advanced/
+├── results_v2/
+├── scripts/
 └── README.md
 ```
 
-- `dataset/`
-  Code samples and PR metadata payloads used in the experiments.
-- `scripts/`
-  Execution and analysis scripts.
-- `results_v2/`
-  Results from the dataset-based `v2` pipeline and manual GitHub review logs.
-- `results_advanced/`
-  Results from `advanced_experiment.py`.
+- `dataset/` stores the Python and JavaScript review cases plus PR metadata payload files.
+- `scripts/` stores the active runners, analyzers, and GitHub automation helpers.
+- `results_v2/` stores dataset-based experiment outputs and manual GitHub review scoring sheets.
+- `results_advanced/` stores outputs from the advanced channel-separated benchmark.
+- `cases/` stores extra case material kept alongside the main dataset.
 
-## Dataset Notes
-
-The Python dataset currently uses these conditions:
-
-- `original`
-- `payload_comment`
-- `payload_string`
-- `payload_varname`
-- `payload_pr_title`
-- `payload_pr_desc`
-- `payload_commit_msg`
-- `payload_encoding`
-- `payload_overflow`
-- `payload_role_switch`
-- `payload_multi_file`
-
-The JavaScript dataset is currently prepared for these conditions:
-
-- `original`
-- `payload_comment`
-- `payload_string`
-- `payload_varname`
-- `payload_pr_title`
-- `payload_pr_desc`
-- `payload_commit_msg`
-
-## Scripts in Active Use
+## Active Scripts
 
 - `scripts/reviewer_v2.py`
-  Runs review generation and second-pass grading over the file-based dataset.
+  Runs the dataset-based review pipeline and second-pass grading.
 - `scripts/run_all_v2.sh`
-  Batch runner for the full `v2` experiment. It walks both Python and JavaScript conditions.
+  Batch runner for the dataset benchmark across Python and JavaScript conditions.
 - `scripts/analyze_v2.py`
-  Reads `results_v2/` and summarizes average scores and attack success rates.
+  Summarizes `results_v2/` into paper-ready score tables and CSV exports.
 - `scripts/advanced_experiment.py`
-  Runs a separate experiment based on hardcoded vulnerable samples and attack combinations rather than the file-based dataset layout.
+  Runs the channel-separated PR metadata benchmark on hardcoded vulnerable samples.
 - `scripts/setup_github_test.sh`
-  Prepares GitHub PR experiments.
+  Creates GitHub branches and pull requests for external review-tool experiments.
 
-## Running Experiments
-
-### v2 dataset-based experiment
+## Running the Dataset Benchmark
 
 ```bash
 cd scripts
@@ -76,9 +49,9 @@ bash run_all_v2.sh
 python analyze_v2.py --results-dir ../results_v2 --csv ../results_v2/full_results.csv
 ```
 
-Missing payload directories are skipped automatically.
+The batch runner skips missing directories automatically, so incomplete language-condition pairs do not stop the run.
 
-### Advanced combination experiment
+## Running the Advanced Benchmark
 
 ```bash
 cd scripts
@@ -86,26 +59,34 @@ export OPENAI_API_KEY=your_openai_api_key
 python advanced_experiment.py --output-dir ../results_advanced
 ```
 
-### GitHub PR experiment
+Optional filters:
+
+```bash
+python advanced_experiment.py --vulns sqli_basic xss_basic --techniques none role_hijack
+```
+
+## Running the GitHub PR Setup
 
 ```bash
 cd scripts
 bash setup_github_test.sh <GITHUB_USERNAME> <REPO_NAME>
 ```
 
+This creates PR branches from the dataset cases so external review tools such as CodeRabbit can be evaluated with the same scoring guide used in the paper.
+
 ## Result Files
 
-- `results_v2/github_results_template.csv`
-  Manual template for GitHub review results.
 - `results_v2/SCORING_GUIDE.md`
-  The 5-level scoring guide.
-- `results_advanced/_results.csv`
-  Summary CSV for the advanced experiment.
+  Five-level review-quality scoring guide used across tools.
+- `results_v2/github_results_template.csv`
+  Manual scoring sheet for GitHub-based review experiments.
 - `results_advanced/_full_results.json`
-  Full raw output for the advanced experiment.
+  Full JSON output from the advanced benchmark.
+- `results_advanced/_results.csv`
+  Flattened CSV export from the advanced benchmark.
 
 ## Notes
 
-- The main results for the paper should come from the `v2` pipeline first.
-- `advanced_experiment.py` is better treated as a supplementary experiment for channel effects.
-- This README is intentionally brief. If the scope of the paper changes, update it together with the dataset and scripts.
+- The dataset benchmark is the main line for the paper.
+- The advanced benchmark is meant to isolate channel effects and attack combinations more aggressively.
+- If the experiment design changes, update the dataset, scripts, and result templates together so the repository stays internally consistent.
