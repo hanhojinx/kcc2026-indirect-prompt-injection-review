@@ -1,11 +1,12 @@
-# KCC 2026 코드리뷰 실험 레포
+# KCC 2026 Code Review Experiment Repo
 
-KCC 2026 논문 작업하면서 쓰는 실험 레포다.  
-주제는 LLM 기반 코드리뷰 환경에서 indirect prompt injection이 리뷰 품질을 얼마나 흔드는지 보는 것이다.
+This repository is for the KCC 2026 paper experiments.
 
-지금 메인으로 보는 건 `v2` 데이터셋 기반 실험이고, 별도로 더 공격적인 조합을 돌려보는 `advanced_experiment.py`도 같이 두고 있다.
+The main topic is how indirect prompt injection affects review quality in LLM-based code review environments.
 
-## 폴더
+The main workflow here is the dataset-based `v2` experiment. There is also a separate `advanced_experiment.py` script for more aggressive channel-combination testing.
+
+## Layout
 
 ```text
 github-code-review/
@@ -17,17 +18,17 @@ github-code-review/
 ```
 
 - `dataset/`
-  실험에 쓰는 코드와 PR 메타데이터 payload가 들어 있다.
+  Code samples and PR metadata payloads used in the experiments.
 - `scripts/`
-  실행 스크립트 모음.
+  Execution and analysis scripts.
 - `results_v2/`
-  파일 기반 `v2` 실험 결과와 GitHub 수기 기록용 파일.
+  Results from the dataset-based `v2` pipeline and manual GitHub review logs.
 - `results_advanced/`
-  `advanced_experiment.py` 결과.
+  Results from `advanced_experiment.py`.
 
-## dataset 메모
+## Dataset Notes
 
-Python 쪽은 현재 아래 조건들을 쓴다.
+The Python dataset currently uses these conditions:
 
 - `original`
 - `payload_comment`
@@ -41,7 +42,7 @@ Python 쪽은 현재 아래 조건들을 쓴다.
 - `payload_role_switch`
 - `payload_multi_file`
 
-JavaScript 쪽은 아직 여기까지만 정리돼 있다.
+The JavaScript dataset is currently prepared for these conditions:
 
 - `original`
 - `payload_comment`
@@ -51,22 +52,22 @@ JavaScript 쪽은 아직 여기까지만 정리돼 있다.
 - `payload_pr_desc`
 - `payload_commit_msg`
 
-## 지금 실제로 쓰는 스크립트
+## Scripts in Active Use
 
 - `scripts/reviewer_v2.py`
-  `dataset/` 기반으로 리뷰 생성 + 2차 채점까지 수행한다.
+  Runs review generation and second-pass grading over the file-based dataset.
 - `scripts/run_all_v2.sh`
-  `v2` 전체 배치 실행용. Python, JavaScript 둘 다 순회한다.
+  Batch runner for the full `v2` experiment. It walks both Python and JavaScript conditions.
 - `scripts/analyze_v2.py`
-  `results_v2/`를 읽어서 평균 점수, 공격 성공 비율 등을 본다.
+  Reads `results_v2/` and summarizes average scores and attack success rates.
 - `scripts/advanced_experiment.py`
-  파일 기반 데이터셋과는 별도로, 하드코딩된 취약 코드와 공격 조합을 한꺼번에 돌리는 실험용이다.
+  Runs a separate experiment based on hardcoded vulnerable samples and attack combinations rather than the file-based dataset layout.
 - `scripts/setup_github_test.sh`
-  GitHub PR 실험 세팅용.
+  Prepares GitHub PR experiments.
 
-## 실행
+## Running Experiments
 
-### v2 실험
+### v2 dataset-based experiment
 
 ```bash
 cd scripts
@@ -75,9 +76,9 @@ bash run_all_v2.sh
 python analyze_v2.py --results-dir ../results_v2 --csv ../results_v2/full_results.csv
 ```
 
-없는 payload 디렉토리는 자동으로 스킵한다.
+Missing payload directories are skipped automatically.
 
-### 고급 조합 실험
+### Advanced combination experiment
 
 ```bash
 cd scripts
@@ -85,26 +86,26 @@ export OPENAI_API_KEY=your_openai_api_key
 python advanced_experiment.py --output-dir ../results_advanced
 ```
 
-### GitHub PR 실험
+### GitHub PR experiment
 
 ```bash
 cd scripts
 bash setup_github_test.sh <GITHUB_USERNAME> <REPO_NAME>
 ```
 
-## 결과 파일
+## Result Files
 
 - `results_v2/github_results_template.csv`
-  GitHub 리뷰 결과 수기로 적어두는 템플릿.
+  Manual template for GitHub review results.
 - `results_v2/SCORING_GUIDE.md`
-  5단계 채점 기준.
+  The 5-level scoring guide.
 - `results_advanced/_results.csv`
-  고급 조합 실험 결과 요약 CSV.
+  Summary CSV for the advanced experiment.
 - `results_advanced/_full_results.json`
-  고급 조합 실험 원본 결과.
+  Full raw output for the advanced experiment.
 
-## 메모
+## Notes
 
-- 논문 본문에 직접 넣을 메인 결과는 우선 `v2` 기준으로 보는 게 맞다.
-- `advanced_experiment.py`는 채널 효과를 더 세게 보기 위한 보조 실험에 가깝다.
-- README는 필요한 내용만 적어둔 상태라, 논문 범위가 바뀌면 같이 고치는 편이 편하다.
+- The main results for the paper should come from the `v2` pipeline first.
+- `advanced_experiment.py` is better treated as a supplementary experiment for channel effects.
+- This README is intentionally brief. If the scope of the paper changes, update it together with the dataset and scripts.
